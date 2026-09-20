@@ -78,10 +78,47 @@ detect_pkg() {
 }
 PKG="$(detect_pkg)"
 
+prepare_debian_apt() {
+  [[ "$PKG" == "apt" && -r /etc/os-release ]] || return 0
+  # Debian 11 (bullseye) repositories moved to the Debian archive after EOL.
+  . /etc/os-release
+  [[ "${ID:-}" == "debian" && "${VERSION_CODENAME:-}" == "bullseye" ]] || return 0
+
+  local archive_list="/etc/apt/sources.list.d/codex-bullseye-archive.list"
+  if [[ ! -f "$archive_list" ]]; then
+    local backup_suffix="codex-bullseye.$(date +%Y%m%d%H%M%S).bak"
+    [[ -f /etc/apt/sources.list ]] && cp -a /etc/apt/sources.list "/etc/apt/sources.list.${backup_suffix}"
+    # Keep non-Debian repositories, but disable obsolete Debian mirror lines.
+    if [[ -f /etc/apt/sources.list ]]; then
+      sed -i -E '/^[[:space:]]*deb(-src)?[[:space:]]+(http|https):\/\/(deb\.debian\.org|security\.debian\.org)/ s/^/# disabled by vless-reality installer: /' /etc/apt/sources.list
+    fi
+    local source_file
+    for source_file in /etc/apt/sources.list.d/*.list; do
+      [[ -f "$source_file" ]] || continue
+      sed -i -E '/^[[:space:]]*deb(-src)?[[:space:]]+(http|https):\/\/(deb\.debian\.org|security\.debian\.org)/ s/^/# disabled by vless-reality installer: /' "$source_file"
+    done
+    for source_file in /etc/apt/sources.list.d/*.sources; do
+      [[ -f "$source_file" ]] || continue
+      if grep -Eq 'deb\.debian\.org|security\.debian\.org' "$source_file"; then
+        mv "$source_file" "${source_file}.disabled-by-vless-reality"
+      fi
+    done
+    cat >"$archive_list" <<'EOF'
+deb [check-valid-until=no] http://archive.debian.org/debian bullseye main contrib non-free
+deb [check-valid-until=no] http://archive.debian.org/debian bullseye-updates main contrib non-free
+deb [check-valid-until=no] http://archive.debian.org/debian bullseye-backports main contrib non-free
+EOF
+    cat >/etc/apt/apt.conf.d/99codex-debian-archive <<'EOF'
+Acquire::Check-Valid-Until "false";
+EOF
+  fi
+}
+
 install_packages() {
   log "安装基础依赖"
   case "$PKG" in
     apt)
+      prepare_debian_apt
       apt-get update -y
       apt-get install -y --no-install-recommends ca-certificates curl openssl jq unzip iproute2 procps
       ;;
