@@ -305,7 +305,13 @@ setup_https_subscription() {
   mkdir -p "${SUB_DIR}/${SUB_TOKEN}"
   cp "${SUB_DIR}/vless.base64" "${SUB_DIR}/${SUB_TOKEN}/vless.txt"
   cp "${SUB_DIR}/clash.yaml" "${SUB_DIR}/${SUB_TOKEN}/clash.yaml"
-  chmod 600 "${SUB_DIR}/${SUB_TOKEN}"/*
+  NGINX_USER="$(awk '$1 == "user" {gsub(";", "", $2); print $2; exit}' /etc/nginx/nginx.conf 2>/dev/null || true)"
+  NGINX_USER="${NGINX_USER:-www-data}"
+  NGINX_GROUP="$(id -gn "$NGINX_USER" 2>/dev/null || printf '%s' "$NGINX_USER")"
+  chown "root:${NGINX_GROUP}" "$SUB_DIR" "${SUB_DIR}/${SUB_TOKEN}" "${SUB_DIR}/${SUB_TOKEN}"/*
+  chmod 711 "$SUB_DIR"
+  chmod 750 "${SUB_DIR}/${SUB_TOKEN}"
+  chmod 640 "${SUB_DIR}/${SUB_TOKEN}"/*
 
   mkdir -p /var/www/acme
   systemctl stop nginx 2>/dev/null || true
