@@ -287,12 +287,15 @@ chmod 600 "${SUB_DIR}/"*
 
 setup_https_subscription() {
   [[ "$INSTALL_SUBSCRIPTION_SERVER" == 1 ]] || return 0
-  command -v nginx >/dev/null 2>&1 || {
+  local web_packages=()
+  command -v nginx >/dev/null 2>&1 || web_packages+=(nginx)
+  command -v certbot >/dev/null 2>&1 || web_packages+=(certbot)
+  if ((${#web_packages[@]} > 0)); then
     case "$PKG" in
-      apt) apt-get install -y --no-install-recommends nginx certbot ;;
-      dnf|yum) "$PKG" install -y nginx certbot ;;
+      apt) apt-get install -y --no-install-recommends "${web_packages[@]}" ;;
+      dnf|yum) "$PKG" install -y "${web_packages[@]}" ;;
     esac
-  }
+  fi
   command -v nginx >/dev/null 2>&1 || { warn "无法安装 nginx，跳过公网订阅地址。"; return 0; }
   command -v certbot >/dev/null 2>&1 || { warn "无法安装 certbot，跳过公网订阅地址。"; return 0; }
 
