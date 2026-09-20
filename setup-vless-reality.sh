@@ -118,8 +118,24 @@ log "生成 Reality 密钥、UUID 和 shortId"
 UUID="$(cat /proc/sys/kernel/random/uuid)"
 SHORT_ID="$(openssl rand -hex 8)"
 KEY_OUTPUT="$(xray x25519 2>/dev/null)" || die "无法生成 Reality 密钥。"
-PRIVATE_KEY="$(printf '%s\n' "$KEY_OUTPUT" | awk -F': ' '/Private key:/ {print $2; exit}')"
-PUBLIC_KEY="$(printf '%s\n' "$KEY_OUTPUT" | awk -F': ' '/Public key:/ {print $2; exit}')"
+parse_x25519_key() {
+  local wanted="$1"
+  printf '%s\n' "$KEY_OUTPUT" | awk -v wanted="$wanted" '
+    {
+      colon = index($0, ":")
+      if (!colon) next
+      label = substr($0, 1, colon - 1)
+      value = substr($0, colon + 1)
+      sub(/^[[:space:]]+/, "", value)
+      normalized = tolower(label)
+      gsub(/[[:space:]()]/, "", normalized)
+      if (wanted == "private" && normalized == "privatekey") { print value; exit }
+      if (wanted == "public" && (normalized == "publickey" || normalized == "password" || normalized == "passwordpublickey")) { print value; exit }
+    }
+  '
+}
+PRIVATE_KEY="$(parse_x25519_key private)"
+PUBLIC_KEY="$(parse_x25519_key public)"
 [[ -n "$PRIVATE_KEY" && -n "$PUBLIC_KEY" ]] || die "Reality 密钥解析失败。"
 
 cat >"${STATE_DIR}/node.env" <<EOF
