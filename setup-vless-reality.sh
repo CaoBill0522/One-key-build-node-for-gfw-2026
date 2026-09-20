@@ -96,7 +96,8 @@ install_packages() {
 
 install_packages
 mkdir -p "$XRAY_DIR" "$STATE_DIR" "$SUB_DIR"
-chmod 700 "$XRAY_DIR" "$STATE_DIR" "$SUB_DIR"
+chmod 755 "$XRAY_DIR"
+chmod 700 "$STATE_DIR" "$SUB_DIR"
 
 install_xray() {
   if command -v xray >/dev/null 2>&1; then
@@ -189,7 +190,15 @@ cat >"${XRAY_DIR}/config.json" <<EOF
   ]
 }
 EOF
-chmod 600 "${XRAY_DIR}/config.json"
+XRAY_SERVICE_USER="$(systemctl show -p User --value xray 2>/dev/null || true)"
+if [[ -z "$XRAY_SERVICE_USER" || "$XRAY_SERVICE_USER" == "root" ]]; then
+  chmod 600 "${XRAY_DIR}/config.json"
+else
+  XRAY_SERVICE_GROUP="$(id -gn "$XRAY_SERVICE_USER" 2>/dev/null || printf '%s' "$XRAY_SERVICE_USER")"
+  chown "root:${XRAY_SERVICE_GROUP}" "$XRAY_DIR" "${XRAY_DIR}/config.json"
+  chmod 750 "$XRAY_DIR"
+  chmod 640 "${XRAY_DIR}/config.json"
+fi
 xray run -test -config "${XRAY_DIR}/config.json" >/dev/null || die "Xray 配置校验失败。"
 
 log "应用网络与文件句柄优化"
